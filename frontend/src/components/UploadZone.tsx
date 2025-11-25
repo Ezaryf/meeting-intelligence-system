@@ -1,58 +1,110 @@
-import React from 'react';
-import { Upload, CheckCircle } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Upload, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
-export const UploadZone: React.FC = () => {
-    const [isDragging, setIsDragging] = React.useState(false);
-    const [file, setFile] = React.useState<File | null>(null);
+export function UploadZone() {
+    const [isDragging, setIsDragging] = useState(false);
+    const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+    const [progress, setProgress] = useState(0);
 
-    const handleDragOver = (e: React.DragEvent) => {
+    const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
         setIsDragging(true);
-    };
+    }, []);
 
-    const handleDragLeave = () => {
-        setIsDragging(false);
-    };
-
-    const handleDrop = (e: React.DragEvent) => {
+    const handleDragLeave = useCallback((e: React.DragEvent) => {
         e.preventDefault();
         setIsDragging(false);
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            setFile(e.dataTransfer.files[0]);
-            // Simulate upload
-            setTimeout(() => alert("Upload simulated!"), 1000);
+    }, []);
+
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleUpload(files[0]);
         }
+    }, []);
+
+    const handleUpload = (file: File) => {
+        setUploadStatus('uploading');
+        // Simulate upload
+        let p = 0;
+        const interval = setInterval(() => {
+            p += 5;
+            setProgress(p);
+            if (p >= 100) {
+                clearInterval(interval);
+                setUploadStatus('success');
+                setTimeout(() => {
+                    setUploadStatus('idle');
+                    setProgress(0);
+                }, 3000);
+            }
+        }, 100);
     };
 
     return (
         <div
-            className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${isDragging ? 'border-primary bg-blue-50' : 'border-slate-300 hover:border-primary'
-                }`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
+            className={`
+                relative overflow-hidden rounded-2xl border-2 border-dashed transition-all duration-300 group cursor-pointer
+                ${isDragging
+                    ? 'border-primary bg-primary/5 scale-[1.01] shadow-xl shadow-primary/10'
+                    : 'border-slate-200 hover:border-primary/50 hover:bg-slate-50'
+                }
+            `}
         >
-            <div className="flex flex-col items-center gap-4">
-                {file ? (
-                    <>
-                        <CheckCircle className="w-12 h-12 text-green-500" />
-                        <div>
-                            <p className="font-semibold text-lg">{file.name}</p>
-                            <p className="text-sm text-slate-500">Ready to process</p>
-                        </div>
-                    </>
-                ) : (
-                    <>
-                        <div className="p-4 bg-blue-100 rounded-full">
-                            <Upload className="w-8 h-8 text-primary" />
-                        </div>
-                        <div>
-                            <p className="font-semibold text-lg">Drop your meeting recording here</p>
-                            <p className="text-sm text-slate-500">MP4, MOV, or WAV up to 2GB</p>
-                        </div>
-                    </>
+            <div className="p-12 text-center relative z-10">
+                <div className={`
+                    w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center transition-all duration-300
+                    ${uploadStatus === 'success' ? 'bg-green-100 text-green-600' :
+                        uploadStatus === 'error' ? 'bg-red-100 text-red-600' :
+                            isDragging ? 'bg-primary text-white scale-110' : 'bg-blue-50 text-blue-600 group-hover:scale-110'}
+                `}>
+                    {uploadStatus === 'success' ? (
+                        <CheckCircle2 size={40} className="animate-bounce" />
+                    ) : uploadStatus === 'error' ? (
+                        <AlertCircle size={40} />
+                    ) : uploadStatus === 'uploading' ? (
+                        <Loader2 size={40} className="animate-spin" />
+                    ) : (
+                        <Upload size={40} />
+                    )}
+                </div>
+
+                <div className="space-y-2">
+                    <h3 className="text-xl font-semibold text-slate-900">
+                        {uploadStatus === 'uploading' ? 'Uploading meeting...' :
+                            uploadStatus === 'success' ? 'Upload complete!' :
+                                'Drop your meeting recording here'}
+                    </h3>
+                    <p className="text-slate-500 max-w-sm mx-auto">
+                        {uploadStatus === 'uploading' ? 'Please wait while we process your file.' :
+                            'Support for MP4, MOV, and AVI files. AI processing starts automatically.'}
+                    </p>
+                </div>
+
+                {uploadStatus === 'idle' && (
+                    <button className="mt-8 px-8 py-3 bg-white border border-slate-200 text-slate-700 font-medium rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm hover:shadow">
+                        Select File
+                    </button>
                 )}
             </div>
+
+            {/* Progress Bar */}
+            {uploadStatus === 'uploading' && (
+                <div className="absolute bottom-0 left-0 w-full h-1.5 bg-slate-100">
+                    <div
+                        className="h-full bg-primary transition-all duration-300 ease-out"
+                        style={{ width: `${progress}%` }}
+                    />
+                </div>
+            )}
+
+            {/* Background Pattern */}
+            <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#4f46e5_1px,transparent_1px)] [background-size:16px_16px]" />
         </div>
     );
-};
+}

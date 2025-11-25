@@ -1,56 +1,93 @@
-import React from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { TrendingUp, Users, Clock, MessageSquare } from 'lucide-react';
 
-const ENGAGEMENT_DATA = [
-    { time: '00:00', score: 65 },
-    { time: '00:10', score: 75 },
-    { time: '00:20', score: 85 },
-    { time: '00:30', score: 60 },
-    { time: '00:40', score: 90 },
-    { time: '00:50', score: 80 },
+const data = [
+    { name: 'Mon', sentiment: 40, participation: 24 },
+    { name: 'Tue', sentiment: 30, participation: 13 },
+    { name: 'Wed', sentiment: 20, participation: 98 },
+    { name: 'Thu', sentiment: 27, participation: 39 },
+    { name: 'Fri', sentiment: 18, participation: 48 },
+    { name: 'Sat', sentiment: 23, participation: 38 },
+    { name: 'Sun', sentiment: 34, participation: 43 },
 ];
 
-const SENTIMENT_DATA = [
-    { time: '00:00', positive: 40, negative: 10 },
-    { time: '00:10', positive: 60, negative: 5 },
-    { time: '00:20', positive: 70, negative: 15 },
-    { time: '00:30', positive: 30, negative: 40 },
-    { time: '00:40', positive: 80, negative: 5 },
-];
+const StatCard = ({ icon: Icon, label, value, trend, color }: any) => (
+    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+        <div className="flex justify-between items-start mb-4">
+            <div className={`p-3 rounded-xl ${color} bg-opacity-10 text-opacity-100`}>
+                <Icon size={24} className={color.replace('bg-', 'text-')} />
+            </div>
+            <span className={`text-xs font-medium px-2 py-1 rounded-full ${trend > 0 ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
+                {trend > 0 ? '+' : ''}{trend}%
+            </span>
+        </div>
+        <h4 className="text-3xl font-bold text-slate-900 mb-1">{value}</h4>
+        <p className="text-slate-500 text-sm">{label}</p>
+    </div>
+);
 
-export const AnalyticsDashboard: React.FC = () => {
+export function AnalyticsDashboard() {
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <h3 className="font-semibold mb-6">Engagement Timeline</h3>
-                <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={ENGAGEMENT_DATA}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis dataKey="time" axisLine={false} tickLine={false} />
-                            <YAxis axisLine={false} tickLine={false} />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="score" stroke="#2563eb" strokeWidth={2} dot={false} />
-                        </LineChart>
-                    </ResponsiveContainer>
-                </div>
+        <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <StatCard icon={TrendingUp} label="Avg. Sentiment" value="8.4" trend={12} color="bg-blue-500" />
+                <StatCard icon={Users} label="Total Participants" value="1,234" trend={5} color="bg-purple-500" />
+                <StatCard icon={Clock} label="Meeting Hours" value="48.5" trend={-2} color="bg-orange-500" />
+                <StatCard icon={MessageSquare} label="Action Items" value="156" trend={8} color="bg-green-500" />
             </div>
 
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <h3 className="font-semibold mb-6">Sentiment Analysis</h3>
-                <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={SENTIMENT_DATA}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis dataKey="time" axisLine={false} tickLine={false} />
-                            <YAxis axisLine={false} tickLine={false} />
-                            <Tooltip />
-                            <Bar dataKey="positive" fill="#10b981" radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="negative" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-slate-900">Sentiment Trends</h3>
+                        <select className="text-sm border-none bg-slate-50 rounded-lg px-3 py-1 text-slate-600 focus:ring-0 cursor-pointer hover:bg-slate-100 transition-colors">
+                            <option>This Week</option>
+                            <option>Last Week</option>
+                        </select>
+                    </div>
+                    <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={data}>
+                                <defs>
+                                    <linearGradient id="colorSentiment" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
+                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                                <Tooltip
+                                    contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                    itemStyle={{ color: '#1e293b' }}
+                                />
+                                <Area type="monotone" dataKey="sentiment" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorSentiment)" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-slate-900">Participation Rate</h3>
+                        <button className="text-sm text-primary font-medium hover:text-blue-700">View Report</button>
+                    </div>
+                    <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={data}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                                <Tooltip
+                                    cursor={{ fill: '#f8fafc' }}
+                                    contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                />
+                                <Bar dataKey="participation" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={32} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
             </div>
         </div>
     );
-};
+}

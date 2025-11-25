@@ -1,15 +1,26 @@
 import os
 import uuid
-import boto3
 import json
+import sqlite3
+import threading
+import shutil
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from mangum import Mangum
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List
 
-app = FastAPI(title="Meeting Intelligence API")
+# Import processing functions
+# Assuming these are in the python path or we append it
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from processing.transcribe import transcribe_audio
+from processing.analyze_video import analyze_video
+from processing.summarize import summarize_text
+from processing.embeddings import generate_embeddings
+
+app = FastAPI(title="Meeting Intelligence API (Local)")
 
 # CORS
 app.add_middleware(
@@ -20,150 +31,172 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# AWS Clients
-s3_client = boto3.client('s3')
-# In a real Lambda environment, these would be set via environment variables
-RAW_BUCKET = os.environ.get('RAW_BUCKET', 'meeting-intelligence-raw-files')
-DB_HOST = os.environ.get('DB_HOST', 'localhost')
-DB_USER = os.environ.get('DB_USER', 'dbadmin')
-DB_PASS = os.environ.get('DB_PASS', 'securepassword123')
-DB_NAME = os.environ.get('DB_NAME', 'meeting_intelligence')
+# Local Config
+UPLOAD_DIR = "uploads"
+PROCESSED_DIR = "processed"
+DB_PATH = "meeting_intelligence.db"
+
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(PROCESSED_DIR, exist_ok=True)
+
+# Database Setup
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS meetings (
+            id TEXT PRIMARY KEY,
+            title TEXT,
+            filename TEXT,
+            status TEXT,
+            created_at TIMESTAMP,
+            duration INTEGER
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
 
 # Models
 class MeetingResponse(BaseModel):
     id: str
     title: str
-    created_at: datetime
+    created_at: str
     status: str
+
+# Background Processing Task
+def process_meeting(meeting_id: str, file_path: str):
+    print(f"Starting processing for {meeting_id}")
+    
+    try:
+        # 1. Transcribe (Whisper)
+        # Note: Whisper handles video files directly usually, or we extract audio
+        transcript_path = os.path.join(PROCESSED_DIR, f"{meeting_id}_transcript.json")
+        transcribe_audio(file_path, transcript_path)
+        
+        # 2. Video Analysis (MediaPipe)
+        analysis_path = os.path.join(PROCESSED_DIR, f"{meeting_id}_analysis.json")
+        analyze_video(file_path, analysis_path)
+        
+        # 3. Summarize
+        summary_path = os.path.join(PROCESSED_DIR, f"{meeting_id}_summary.json")
+        summarize_text(transcript_path, summary_path)
+        
+        # 4. Embeddings (Optional/Mock for now if too heavy)
+        # embeddings_path = os.path.join(PROCESSED_DIR, f"{meeting_id}_embeddings.json")
+        # generate_embeddings(transcript_path, embeddings_path)
+        
+        # Update DB status
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("UPDATE meetings SET status = 'processed' WHERE id = ?", (meeting_id,))
+        conn.commit()
+        conn.close()
+        print(f"Processing complete for {meeting_id}")
+        
+    except Exception as e:
+        print(f"Error processing {meeting_id}: {e}")
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("UPDATE meetings SET status = 'failed' WHERE id = ?", (meeting_id,))
+        conn.commit()
+        conn.close()
 
 # Routes
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to Multimodal Meeting Intelligence API"}
+    return {"message": "Meeting Intelligence API (Local Mode)"}
 
 @app.post("/api/meetings/upload")
 async def upload_meeting(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    title: str = Form(...)
+    title: str = Form(...) # Changed to Form to match frontend
 ):
-    """
-    Upload a meeting video/audio file to S3 and trigger processing.
-    """
     try:
-        file_extension = os.path.splitext(file.filename)[1]
         file_id = str(uuid.uuid4())
-        s3_key = f"{file_id}{file_extension}"
+        file_extension = os.path.splitext(file.filename)[1]
+        filename = f"{file_id}{file_extension}"
+        file_path = os.path.join(UPLOAD_DIR, filename)
         
-        # Upload to S3 (Simulated for now if running locally without creds, but code is real)
-        # s3_client.upload_fileobj(file.file, RAW_BUCKET, s3_key)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Insert into DB
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO meetings (id, title, filename, status, created_at) VALUES (?, ?, ?, ?, ?)",
+            (file_id, title, filename, "processing", datetime.now().isoformat())
+        )
+        conn.commit()
+        conn.close()
         
-        # Generate a presigned URL or just return success
-        # In a real app, we might use presigned URLs for direct upload to avoid Lambda limits
-        
-        # Insert into DB (Mocked for now)
-        meeting_id = file_id
-        
-        # Trigger Step Function (Mocked)
+        # Trigger processing in background
+        background_tasks.add_task(process_meeting, file_id, file_path)
         
         return {
-            "id": meeting_id,
+            "id": file_id,
             "title": title,
-            "s3_key": s3_key,
-            "status": "upload_complete_processing_pending"
+            "status": "processing"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/meetings", response_model=List[MeetingResponse])
+@app.get("/api/meetings")
 def list_meetings():
-    """
-    List all meetings.
-    """
-    # Mock data
-    return [
-        {
-            "id": "123e4567-e89b-12d3-a456-426614174000",
-            "title": "Q3 Roadmap Discussion",
-            "created_at": datetime.now(),
-            "status": "processed"
-        }
-    ]
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM meetings ORDER BY created_at DESC")
+    rows = c.fetchall()
+    conn.close()
+    
+    return [dict(row) for row in rows]
 
 @app.get("/api/meetings/{meeting_id}")
 def get_meeting(meeting_id: str):
-    """
-    Get meeting details.
-    """
-    return {
-        "id": meeting_id,
-        "title": "Q3 Roadmap Discussion",
-        "duration": 3600,
-        "participants": ["Alice", "Bob"],
-        "status": "processed"
-    }
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,))
+    row = c.fetchone()
+    conn.close()
+    
+    if not row:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+        
+    return dict(row)
 
 @app.get("/api/meetings/{meeting_id}/transcript")
 def get_transcript(meeting_id: str):
-    return {
-        "meeting_id": meeting_id,
-        "segments": [
-            {"speaker": "Alice", "start": 0.0, "end": 5.0, "text": "Hello everyone."},
-            {"speaker": "Bob", "start": 5.5, "end": 10.0, "text": "Hi Alice, ready to start?"}
-        ]
-    }
-
-@app.get("/api/meetings/{meeting_id}/summary")
-def get_summary(meeting_id: str):
-    return {
-        "meeting_id": meeting_id,
-        "summary": "The team discussed the Q3 roadmap. Key decisions included prioritizing feature X and delaying feature Y.",
-        "key_topics": ["Roadmap", "Feature X", "Feature Y"]
-    }
-
-@app.get("/api/meetings/{meeting_id}/action-items")
-def get_action_items(meeting_id: str):
-    return [
-        {"text": "Alice to send the report", "assignee": "Alice", "due_date": "2023-11-01"},
-        {"text": "Bob to update the jira ticket", "assignee": "Bob", "due_date": "2023-10-25"}
-    ]
+    path = os.path.join(PROCESSED_DIR, f"{meeting_id}_transcript.json")
+    if not os.path.exists(path):
+        # Return mock if processing not done or failed, or 404
+        return {"segments": []}
+    with open(path, "r") as f:
+        return json.load(f)
 
 @app.get("/api/meetings/{meeting_id}/engagement")
 def get_engagement(meeting_id: str):
-    return {
-        "overall_score": 0.85,
-        "timeline": [
-            {"timestamp": 0, "score": 0.8},
-            {"timestamp": 60, "score": 0.9}
-        ]
-    }
+    path = os.path.join(PROCESSED_DIR, f"{meeting_id}_analysis.json")
+    if not os.path.exists(path):
+        return {"timeline": []}
+    with open(path, "r") as f:
+        return json.load(f)
 
-@app.get("/api/meetings/{meeting_id}/sentiment")
-def get_sentiment(meeting_id: str):
-    return {
-        "overall": "positive",
-        "timeline": [
-            {"timestamp": 0, "sentiment": 0.5},
-            {"timestamp": 60, "sentiment": 0.8}
-        ]
-    }
+@app.get("/api/meetings/{meeting_id}/summary")
+def get_summary(meeting_id: str):
+    path = os.path.join(PROCESSED_DIR, f"{meeting_id}_summary.json")
+    if not os.path.exists(path):
+        return {"summary": "Processing...", "key_topics": []}
+    with open(path, "r") as f:
+        return json.load(f)
 
-@app.get("/api/search")
-def search_meetings(query: str):
-    """
-    Semantic search across meetings.
-    """
-    # Mock search results
-    return {
-        "query": query,
-        "results": [
-            {
-                "meeting_id": "123e4567-e89b-12d3-a456-426614174000",
-                "segment_text": "We need to focus on the Q3 roadmap.",
-                "score": 0.95,
-                "timestamp": 120.5
-            }
-        ]
-    }
+# Serve uploaded files statically for video player
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-# Lambda Handler
-handler = Mangum(app)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

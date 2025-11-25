@@ -54,8 +54,8 @@ The backend is designed to run on AWS Lambda but can be tested locally:
 ```bash
 cd backend
 pip install -r requirements.txt
-# Run API locally
-uvicorn api.main:app --reload
+# Run API locally (patched for your environment)
+python run.py
 ```
 
 ### 4. Frontend

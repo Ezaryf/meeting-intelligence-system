@@ -1,88 +1,103 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Sidebar } from './components/Sidebar';
+import { Header } from './components/Header';
 import { UploadZone } from './components/UploadZone';
 import { VideoPlayer } from './components/VideoPlayer';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
-import { LayoutDashboard, Video, Search, Settings, Bell } from 'lucide-react';
 
 function App() {
     const [activeTab, setActiveTab] = useState('dashboard');
+    const [meetings, setMeetings] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (activeTab === 'meetings') {
+            fetch('http://localhost:8000/api/meetings')
+                .then(res => res.json())
+                .then(data => setMeetings(data))
+                .catch(err => console.error(err));
+        }
+    }, [activeTab]);
+
+    const getTitle = () => {
+        switch (activeTab) {
+            case 'dashboard': return 'Dashboard Overview';
+            case 'meetings': return 'My Meetings';
+            case 'search': return 'Search Insights';
+            case 'settings': return 'Settings';
+            default: return 'Dashboard';
+        }
+    };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex">
-            {/* Sidebar */}
-            <aside className="w-64 bg-white border-r border-slate-200 fixed h-full z-10">
-                <div className="p-6 border-b border-slate-100">
-                    <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
-                        MeetingIntel
-                    </h1>
-                </div>
-                <nav className="p-4 space-y-2">
-                    <button
-                        onClick={() => setActiveTab('dashboard')}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'dashboard' ? 'bg-blue-50 text-primary font-medium' : 'text-slate-600 hover:bg-slate-50'}`}
-                    >
-                        <LayoutDashboard size={20} />
-                        Dashboard
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('meetings')}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'meetings' ? 'bg-blue-50 text-primary font-medium' : 'text-slate-600 hover:bg-slate-50'}`}
-                    >
-                        <Video size={20} />
-                        My Meetings
-                    </button>
-                    <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
-                        <Search size={20} />
-                        Search Insights
-                    </button>
-                    <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
-                        <Settings size={20} />
-                        Settings
-                    </button>
-                </nav>
-            </aside>
+        <div className="min-h-screen bg-slate-50 flex font-sans text-slate-900">
+            <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
             {/* Main Content */}
-            <main className="flex-1 ml-64 p-8">
-                <header className="flex justify-between items-center mb-8">
-                    <div>
-                        <h2 className="text-2xl font-bold text-slate-900">
-                            {activeTab === 'dashboard' ? 'Dashboard Overview' : 'Q3 Roadmap Discussion'}
-                        </h2>
-                        <p className="text-slate-500">Welcome back, Alex</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <button className="p-2 text-slate-400 hover:text-slate-600 relative">
-                            <Bell size={20} />
-                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
-                        </button>
-                        <div className="w-10 h-10 bg-slate-200 rounded-full overflow-hidden">
-                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Alex" alt="User" />
-                        </div>
-                    </div>
-                </header>
+            <main className="flex-1 ml-72 p-8 min-h-screen transition-all duration-300">
+                <div className="max-w-7xl mx-auto">
+                    <Header title={getTitle()} />
 
-                {activeTab === 'dashboard' ? (
-                    <div className="space-y-8">
-                        <section>
-                            <h3 className="text-lg font-semibold mb-4">Quick Upload</h3>
-                            <UploadZone />
-                        </section>
+                    <div className="animate-fade-in">
+                        {activeTab === 'dashboard' ? (
+                            <div className="space-y-8">
+                                <section>
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h3 className="text-lg font-semibold text-slate-800">Quick Upload</h3>
+                                    </div>
+                                    <UploadZone />
+                                </section>
 
-                        <section>
-                            <h3 className="text-lg font-semibold mb-4">Recent Analytics</h3>
-                            <AnalyticsDashboard />
-                        </section>
+                                <section>
+                                    <h3 className="text-lg font-semibold text-slate-800 mb-6">Recent Analytics</h3>
+                                    <AnalyticsDashboard />
+                                </section>
+                            </div>
+                        ) : activeTab === 'meetings' ? (
+                            <div className="space-y-4">
+                                {meetings.length === 0 ? (
+                                    <div className="text-center py-20 bg-white rounded-2xl border border-slate-200 border-dashed">
+                                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                            <span className="text-2xl">📹</span>
+                                        </div>
+                                        <h3 className="text-lg font-medium text-slate-900">No meetings found</h3>
+                                        <p className="text-slate-500 mt-1">Upload your first meeting to get started.</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid gap-4">
+                                        {meetings.map(m => (
+                                            <div key={m.id} className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-all flex justify-between items-center group">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg">
+                                                        {m.title.charAt(0)}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-semibold text-slate-900 group-hover:text-primary transition-colors">{m.title}</h4>
+                                                        <p className="text-sm text-slate-500">{new Date(m.created_at).toLocaleString()}</p>
+                                                    </div>
+                                                </div>
+                                                <span className={`px-3 py-1.5 rounded-full text-xs font-medium border ${m.status === 'processed' ? 'bg-green-50 text-green-700 border-green-200' :
+                                                        m.status === 'processing' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                                            'bg-slate-50 text-slate-700 border-slate-200'
+                                                    }`}>
+                                                    {m.status.charAt(0).toUpperCase() + m.status.slice(1)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="space-y-8">
+                                <VideoPlayer />
+                                <AnalyticsDashboard />
+                            </div>
+                        )}
                     </div>
-                ) : (
-                    <div className="space-y-8">
-                        <VideoPlayer />
-                        <AnalyticsDashboard />
-                    </div>
-                )}
+                </div>
             </main>
         </div>
     );
 }
 
 export default App;
+
